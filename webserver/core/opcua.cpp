@@ -118,12 +118,24 @@ static void onVariableValueWrite(UA_Server *server,
         *(IEC_BOOL*)info->variablePtr = *(const UA_Boolean*)data->value.data;
     } else if (info->dataType == &UA_TYPES[UA_TYPES_BYTE]) {
         *(IEC_BYTE*)info->variablePtr = *(const UA_Byte*)data->value.data;
+    } else if (info->dataType == &UA_TYPES[UA_TYPES_SBYTE]) {
+        *(IEC_SINT*)info->variablePtr = *(const UA_SByte*)data->value.data;
+    } else if (info->dataType == &UA_TYPES[UA_TYPES_INT16]) {
+        *(IEC_INT*)info->variablePtr = *(const UA_Int16*)data->value.data;
+    } else if (info->dataType == &UA_TYPES[UA_TYPES_INT32]) {
+        *(IEC_DINT*)info->variablePtr = *(const UA_Int32*)data->value.data;
+    } else if (info->dataType == &UA_TYPES[UA_TYPES_INT64]) {
+        *(IEC_LINT*)info->variablePtr = *(const UA_Int64*)data->value.data;
     } else if (info->dataType == &UA_TYPES[UA_TYPES_UINT16]) {
         *(IEC_UINT*)info->variablePtr = *(const UA_UInt16*)data->value.data;
     } else if (info->dataType == &UA_TYPES[UA_TYPES_UINT32]) {
         *(IEC_UDINT*)info->variablePtr = *(const UA_UInt32*)data->value.data;
     } else if (info->dataType == &UA_TYPES[UA_TYPES_UINT64]) {
         *(IEC_ULINT*)info->variablePtr = *(const UA_UInt64*)data->value.data;
+    } else if (info->dataType == &UA_TYPES[UA_TYPES_FLOAT]) {
+        *(IEC_REAL*)info->variablePtr = *(const UA_Float*)data->value.data;
+    } else if (info->dataType == &UA_TYPES[UA_TYPES_DOUBLE]) {
+        *(IEC_LREAL*)info->variablePtr = *(const UA_Double*)data->value.data;
     }
     pthread_mutex_unlock(&bufferLock);
 }
@@ -227,6 +239,18 @@ static UA_StatusCode readVariableValue(UA_Server *server, const UA_NodeId *sessi
     } else if (binding->dataType == &UA_TYPES[UA_TYPES_BYTE]) {
         UA_Byte v = *(const UA_Byte*)binding->shadowPtr;
         sc = UA_Variant_setScalarCopy(&dataValue->value, &v, &UA_TYPES[UA_TYPES_BYTE]);
+    } else if (binding->dataType == &UA_TYPES[UA_TYPES_SBYTE]) {
+        UA_SByte v = *(const UA_SByte*)binding->shadowPtr;
+        sc = UA_Variant_setScalarCopy(&dataValue->value, &v, &UA_TYPES[UA_TYPES_SBYTE]);
+    } else if (binding->dataType == &UA_TYPES[UA_TYPES_INT16]) {
+        UA_Int16 v = *(const UA_Int16*)binding->shadowPtr;
+        sc = UA_Variant_setScalarCopy(&dataValue->value, &v, &UA_TYPES[UA_TYPES_INT16]);
+    } else if (binding->dataType == &UA_TYPES[UA_TYPES_INT32]) {
+        UA_Int32 v = *(const UA_Int32*)binding->shadowPtr;
+        sc = UA_Variant_setScalarCopy(&dataValue->value, &v, &UA_TYPES[UA_TYPES_INT32]);
+    } else if (binding->dataType == &UA_TYPES[UA_TYPES_INT64]) {
+        UA_Int64 v = *(const UA_Int64*)binding->shadowPtr;
+        sc = UA_Variant_setScalarCopy(&dataValue->value, &v, &UA_TYPES[UA_TYPES_INT64]);
     } else if (binding->dataType == &UA_TYPES[UA_TYPES_UINT16]) {
         UA_UInt16 v = *(const UA_UInt16*)binding->shadowPtr;
         sc = UA_Variant_setScalarCopy(&dataValue->value, &v, &UA_TYPES[UA_TYPES_UINT16]);
@@ -236,6 +260,12 @@ static UA_StatusCode readVariableValue(UA_Server *server, const UA_NodeId *sessi
     } else if (binding->dataType == &UA_TYPES[UA_TYPES_UINT64]) {
         UA_UInt64 v = *(const UA_UInt64*)binding->shadowPtr;
         sc = UA_Variant_setScalarCopy(&dataValue->value, &v, &UA_TYPES[UA_TYPES_UINT64]);
+    } else if (binding->dataType == &UA_TYPES[UA_TYPES_FLOAT]) {
+        UA_Float v = *(const UA_Float*)binding->shadowPtr;
+        sc = UA_Variant_setScalarCopy(&dataValue->value, &v, &UA_TYPES[UA_TYPES_FLOAT]);
+    } else if (binding->dataType == &UA_TYPES[UA_TYPES_DOUBLE]) {
+        UA_Double v = *(const UA_Double*)binding->shadowPtr;
+        sc = UA_Variant_setScalarCopy(&dataValue->value, &v, &UA_TYPES[UA_TYPES_DOUBLE]);
     }
     //dataValue->hasValue = (sc == UA_STATUSCODE_GOOD);
     dataValue->hasValue = false;
@@ -294,6 +324,22 @@ static UA_StatusCode writeVariableValue(UA_Server *server, const UA_NodeId *sess
         UA_Byte v = *(const UA_Byte*)dataValue->value.data;
         *(UA_Byte*)binding->variablePtr = v;
         if (binding->shadowPtr) *(UA_Byte*)binding->shadowPtr = v;
+    } else if (binding->dataType == &UA_TYPES[UA_TYPES_SBYTE]) {
+        UA_SByte v = *(const UA_SByte*)dataValue->value.data;
+        *(UA_SByte*)binding->variablePtr = v;
+        if (binding->shadowPtr) *(UA_SByte*)binding->shadowPtr = v;
+    } else if (binding->dataType == &UA_TYPES[UA_TYPES_INT16]) {
+        UA_Int16 v = *(const UA_Int16*)dataValue->value.data;
+        *(UA_Int16*)binding->variablePtr = v;
+        if (binding->shadowPtr) *(UA_Int16*)binding->shadowPtr = v;
+    } else if (binding->dataType == &UA_TYPES[UA_TYPES_INT32]) {
+        UA_Int32 v = *(const UA_Int32*)dataValue->value.data;
+        *(UA_Int32*)binding->variablePtr = v;
+        if (binding->shadowPtr) *(UA_Int32*)binding->shadowPtr = v;
+    } else if (binding->dataType == &UA_TYPES[UA_TYPES_INT64]) {
+        UA_Int64 v = *(const UA_Int64*)dataValue->value.data;
+        *(UA_Int64*)binding->variablePtr = v;
+        if (binding->shadowPtr) *(UA_Int64*)binding->shadowPtr = v;
     } else if (binding->dataType == &UA_TYPES[UA_TYPES_UINT16]) {
         UA_UInt16 v = *(const UA_UInt16*)dataValue->value.data;
         *(UA_UInt16*)binding->variablePtr = v;
@@ -306,6 +352,14 @@ static UA_StatusCode writeVariableValue(UA_Server *server, const UA_NodeId *sess
         UA_UInt64 v = *(const UA_UInt64*)dataValue->value.data;
         *(UA_UInt64*)binding->variablePtr = v;
         if (binding->shadowPtr) *(UA_UInt64*)binding->shadowPtr = v;
+    } else if (binding->dataType == &UA_TYPES[UA_TYPES_FLOAT]) {
+        UA_Float v = *(const UA_Float*)dataValue->value.data;
+        *(UA_Float*)binding->variablePtr = v;
+        if (binding->shadowPtr) *(UA_Float*)binding->shadowPtr = v;
+    } else if (binding->dataType == &UA_TYPES[UA_TYPES_DOUBLE]) {
+        UA_Double v = *(const UA_Double*)dataValue->value.data;
+        *(UA_Double*)binding->variablePtr = v;
+        if (binding->shadowPtr) *(UA_Double*)binding->shadowPtr = v;
     } else {
         pthread_mutex_unlock(&bufferLock);
         return UA_STATUSCODE_BADTYPEMISMATCH;
@@ -345,6 +399,18 @@ static void addVariableNode(UA_Server *server, const char *nodeName, UA_NodeId p
     } else if (dataType == &UA_TYPES[UA_TYPES_BYTE]) {
         UA_Byte v = (UA_Byte)0;
         UA_Variant_setScalarCopy(&attr.value, &v, &UA_TYPES[UA_TYPES_BYTE]);
+    } else if (dataType == &UA_TYPES[UA_TYPES_SBYTE]) {
+        UA_SByte v = (UA_SByte)0;
+        UA_Variant_setScalarCopy(&attr.value, &v, &UA_TYPES[UA_TYPES_SBYTE]);
+    } else if (dataType == &UA_TYPES[UA_TYPES_INT16]) {
+        UA_Int16 v = (UA_Int16)0;
+        UA_Variant_setScalarCopy(&attr.value, &v, &UA_TYPES[UA_TYPES_INT16]);
+    } else if (dataType == &UA_TYPES[UA_TYPES_INT32]) {
+        UA_Int32 v = (UA_Int32)0;
+        UA_Variant_setScalarCopy(&attr.value, &v, &UA_TYPES[UA_TYPES_INT32]);
+    } else if (dataType == &UA_TYPES[UA_TYPES_INT64]) {
+        UA_Int64 v = (UA_Int64)0;
+        UA_Variant_setScalarCopy(&attr.value, &v, &UA_TYPES[UA_TYPES_INT64]);
     } else if (dataType == &UA_TYPES[UA_TYPES_UINT16]) {
         UA_UInt16 v = (UA_UInt16)0;
         UA_Variant_setScalarCopy(&attr.value, &v, &UA_TYPES[UA_TYPES_UINT16]);
@@ -354,6 +420,12 @@ static void addVariableNode(UA_Server *server, const char *nodeName, UA_NodeId p
     } else if (dataType == &UA_TYPES[UA_TYPES_UINT64]) {
         UA_UInt64 v = (UA_UInt64)0;
         UA_Variant_setScalarCopy(&attr.value, &v, &UA_TYPES[UA_TYPES_UINT64]);
+    } else if (dataType == &UA_TYPES[UA_TYPES_FLOAT]) {
+        UA_Float v = (UA_Float)0.0f;
+        UA_Variant_setScalarCopy(&attr.value, &v, &UA_TYPES[UA_TYPES_FLOAT]);
+    } else if (dataType == &UA_TYPES[UA_TYPES_DOUBLE]) {
+        UA_Double v = (UA_Double)0.0;
+        UA_Variant_setScalarCopy(&attr.value, &v, &UA_TYPES[UA_TYPES_DOUBLE]);
     }
 
     // Create simple variable node (no callbacks for now)
@@ -442,14 +514,22 @@ extern "C" void opcuaUpdateNodeValues() {
             // Read current value from PLC variable
             if (it->dataType == &UA_TYPES[UA_TYPES_BOOLEAN]) {
                 UA_Boolean v = *(IEC_BOOL*)it->variablePtr;
-                // Debug: log the value being read
-                char debug_msg[200];
-                //sprintf(debug_msg, "Reading BOOL value: %d from ptr %p\n", v, it->variablePtr);
-                openplc_log(debug_msg);
                 UA_Variant_setScalarCopy(&value, &v, &UA_TYPES[UA_TYPES_BOOLEAN]);
             } else if (it->dataType == &UA_TYPES[UA_TYPES_BYTE]) {
                 UA_Byte v = *(IEC_BYTE*)it->variablePtr;
                 UA_Variant_setScalarCopy(&value, &v, &UA_TYPES[UA_TYPES_BYTE]);
+            } else if (it->dataType == &UA_TYPES[UA_TYPES_SBYTE]) {
+                UA_SByte v = *(IEC_SINT*)it->variablePtr;
+                UA_Variant_setScalarCopy(&value, &v, &UA_TYPES[UA_TYPES_SBYTE]);
+            } else if (it->dataType == &UA_TYPES[UA_TYPES_INT16]) {
+                UA_Int16 v = *(IEC_INT*)it->variablePtr;
+                UA_Variant_setScalarCopy(&value, &v, &UA_TYPES[UA_TYPES_INT16]);
+            } else if (it->dataType == &UA_TYPES[UA_TYPES_INT32]) {
+                UA_Int32 v = *(IEC_DINT*)it->variablePtr;
+                UA_Variant_setScalarCopy(&value, &v, &UA_TYPES[UA_TYPES_INT32]);
+            } else if (it->dataType == &UA_TYPES[UA_TYPES_INT64]) {
+                UA_Int64 v = *(IEC_LINT*)it->variablePtr;
+                UA_Variant_setScalarCopy(&value, &v, &UA_TYPES[UA_TYPES_INT64]);
             } else if (it->dataType == &UA_TYPES[UA_TYPES_UINT16]) {
                 UA_UInt16 v = *(IEC_UINT*)it->variablePtr;
                 UA_Variant_setScalarCopy(&value, &v, &UA_TYPES[UA_TYPES_UINT16]);
@@ -459,6 +539,12 @@ extern "C" void opcuaUpdateNodeValues() {
             } else if (it->dataType == &UA_TYPES[UA_TYPES_UINT64]) {
                 UA_UInt64 v = *(IEC_ULINT*)it->variablePtr;
                 UA_Variant_setScalarCopy(&value, &v, &UA_TYPES[UA_TYPES_UINT64]);
+            } else if (it->dataType == &UA_TYPES[UA_TYPES_FLOAT]) {
+                UA_Float v = *(IEC_REAL*)it->variablePtr;
+                UA_Variant_setScalarCopy(&value, &v, &UA_TYPES[UA_TYPES_FLOAT]);
+            } else if (it->dataType == &UA_TYPES[UA_TYPES_DOUBLE]) {
+                UA_Double v = *(IEC_LREAL*)it->variablePtr;
+                UA_Variant_setScalarCopy(&value, &v, &UA_TYPES[UA_TYPES_DOUBLE]);
             }
             
             // Write value to OPC UA node
@@ -633,13 +719,14 @@ static void createProgramVariablesFolder(UA_Server *server, UA_NodeId *outFolder
     if (outFolderId) *outFolderId = programVarsFolder;
 }
 
+
 // Resolve pointer and UA type from IEC location token like %IX0.0, %QW10, %MD954
 static bool resolvePointerFromLocation(const char *location, void **outPtr, const UA_DataType **outType) {
     if (!location || !outPtr || !outType) return false;
     // Expect a leading '%'
     if (location[0] != '%') return false;
     char area = location[1]; // I,Q,M
-    char type = location[2]; // X,B,W,D,L
+    char type = location[2]; // X,B,W,D,L,R,F (F=LREAL for double precision)
     const char *rest = location + 3;
 
     int index1 = 0;
@@ -656,25 +743,148 @@ static bool resolvePointerFromLocation(const char *location, void **outPtr, cons
         index1 = atoi(rest);
     }
 
+    // Use a more robust approach: try to access the array and handle errors gracefully
+    // This approach works for any PLC program regardless of which data types are defined
+    
     switch (area) {
         case 'I':
-            if (type == 'X') { if (index1>=0 && index1<BUFFER_SIZE) { *outPtr = (void*)bool_input[index1][index2]; *outType = &UA_TYPES[UA_TYPES_BOOLEAN]; return *outPtr != NULL; } }
-            if (type == 'B') { if (index1>=0 && index1<BUFFER_SIZE) { *outPtr = (void*)byte_input[index1]; *outType = &UA_TYPES[UA_TYPES_BYTE]; return *outPtr != NULL; } }
-            if (type == 'W') { if (index1>=0 && index1<BUFFER_SIZE) { *outPtr = (void*)int_input[index1]; *outType = &UA_TYPES[UA_TYPES_UINT16]; return *outPtr != NULL; } }
-            if (type == 'D') { if (index1>=0 && index1<BUFFER_SIZE) { *outPtr = (void*)dint_input[index1]; *outType = &UA_TYPES[UA_TYPES_UINT32]; return *outPtr != NULL; } }
-            if (type == 'L') { if (index1>=0 && index1<BUFFER_SIZE) { *outPtr = (void*)lint_input[index1]; *outType = &UA_TYPES[UA_TYPES_UINT64]; return *outPtr != NULL; } }
+            if (type == 'X') { 
+                if (index1>=0 && index1<BUFFER_SIZE && bool_input[index1][index2] != NULL) { 
+                    *outPtr = (void*)bool_input[index1][index2]; 
+                    *outType = &UA_TYPES[UA_TYPES_BOOLEAN]; 
+                    return *outPtr != NULL; 
+                } 
+            }
+            if (type == 'B') { 
+                if (index1>=0 && index1<BUFFER_SIZE && byte_input[index1] != NULL) { 
+                    *outPtr = (void*)byte_input[index1]; 
+                    *outType = &UA_TYPES[UA_TYPES_BYTE]; 
+                    return *outPtr != NULL; 
+                } 
+            }
+            if (type == 'W') { 
+                if (index1>=0 && index1<BUFFER_SIZE && int_input[index1] != NULL) { 
+                    *outPtr = (void*)int_input[index1]; 
+                    *outType = &UA_TYPES[UA_TYPES_UINT16]; 
+                    return *outPtr != NULL; 
+                } 
+            }
+            if (type == 'D') { 
+                if (index1>=0 && index1<BUFFER_SIZE && dint_input[index1] != NULL) { 
+                    *outPtr = (void*)dint_input[index1]; 
+                    *outType = &UA_TYPES[UA_TYPES_UINT32]; 
+                    return *outPtr != NULL; 
+                } 
+            }
+            if (type == 'L') { 
+                if (index1>=0 && index1<BUFFER_SIZE && lint_input[index1] != NULL) { 
+                    *outPtr = (void*)lint_input[index1]; 
+                    *outType = &UA_TYPES[UA_TYPES_UINT64]; 
+                    return *outPtr != NULL; 
+                } 
+            }
+            if (type == 'R') { 
+                if (index1>=0 && index1<BUFFER_SIZE && real_input[index1] != NULL) { 
+                    *outPtr = (void*)real_input[index1]; 
+                    *outType = &UA_TYPES[UA_TYPES_FLOAT]; 
+                    return *outPtr != NULL; 
+                } 
+            }
+            if (type == 'F') { 
+                if (index1>=0 && index1<BUFFER_SIZE && lreal_input[index1] != NULL) { 
+                    *outPtr = (void*)lreal_input[index1]; 
+                    *outType = &UA_TYPES[UA_TYPES_DOUBLE]; 
+                    return *outPtr != NULL; 
+                } 
+            }
             break;
         case 'Q':
-            if (type == 'X') { if (index1>=0 && index1<BUFFER_SIZE) { *outPtr = (void*)bool_output[index1][index2]; *outType = &UA_TYPES[UA_TYPES_BOOLEAN]; return *outPtr != NULL; } }
-            if (type == 'B') { if (index1>=0 && index1<BUFFER_SIZE) { *outPtr = (void*)byte_output[index1]; *outType = &UA_TYPES[UA_TYPES_BYTE]; return *outPtr != NULL; } }
-            if (type == 'W') { if (index1>=0 && index1<BUFFER_SIZE) { *outPtr = (void*)int_output[index1]; *outType = &UA_TYPES[UA_TYPES_UINT16]; return *outPtr != NULL; } }
-            if (type == 'D') { if (index1>=0 && index1<BUFFER_SIZE) { *outPtr = (void*)dint_output[index1]; *outType = &UA_TYPES[UA_TYPES_UINT32]; return *outPtr != NULL; } }
-            if (type == 'L') { if (index1>=0 && index1<BUFFER_SIZE) { *outPtr = (void*)lint_output[index1]; *outType = &UA_TYPES[UA_TYPES_UINT64]; return *outPtr != NULL; } }
+            if (type == 'X') { 
+                if (index1>=0 && index1<BUFFER_SIZE && bool_output[index1][index2] != NULL) { 
+                    *outPtr = (void*)bool_output[index1][index2]; 
+                    *outType = &UA_TYPES[UA_TYPES_BOOLEAN]; 
+                    return *outPtr != NULL; 
+                } 
+            }
+            if (type == 'B') { 
+                if (index1>=0 && index1<BUFFER_SIZE && byte_output[index1] != NULL) { 
+                    *outPtr = (void*)byte_output[index1]; 
+                    *outType = &UA_TYPES[UA_TYPES_BYTE]; 
+                    return *outPtr != NULL; 
+                } 
+            }
+            if (type == 'W') { 
+                if (index1>=0 && index1<BUFFER_SIZE && int_output[index1] != NULL) { 
+                    *outPtr = (void*)int_output[index1]; 
+                    *outType = &UA_TYPES[UA_TYPES_UINT16]; 
+                    return *outPtr != NULL; 
+                } 
+            }
+            if (type == 'D') { 
+                if (index1>=0 && index1<BUFFER_SIZE && dint_output[index1] != NULL) { 
+                    *outPtr = (void*)dint_output[index1]; 
+                    *outType = &UA_TYPES[UA_TYPES_UINT32]; 
+                    return *outPtr != NULL; 
+                } 
+            }
+            if (type == 'L') { 
+                if (index1>=0 && index1<BUFFER_SIZE && lint_output[index1] != NULL) { 
+                    *outPtr = (void*)lint_output[index1]; 
+                    *outType = &UA_TYPES[UA_TYPES_UINT64]; 
+                    return *outPtr != NULL; 
+                } 
+            }
+            if (type == 'R') { 
+                if (index1>=0 && index1<BUFFER_SIZE && real_output[index1] != NULL) { 
+                    *outPtr = (void*)real_output[index1]; 
+                    *outType = &UA_TYPES[UA_TYPES_FLOAT]; 
+                    return *outPtr != NULL; 
+                } 
+            }
+            if (type == 'F') { 
+                if (index1>=0 && index1<BUFFER_SIZE && lreal_output[index1] != NULL) { 
+                    *outPtr = (void*)lreal_output[index1]; 
+                    *outType = &UA_TYPES[UA_TYPES_DOUBLE]; 
+                    return *outPtr != NULL; 
+                } 
+            }
             break;
         case 'M':
-            if (type == 'W') { if (index1>=0 && index1<BUFFER_SIZE) { *outPtr = (void*)int_memory[index1]; *outType = &UA_TYPES[UA_TYPES_UINT16]; return *outPtr != NULL; } }
-            if (type == 'D') { if (index1>=0 && index1<BUFFER_SIZE) { *outPtr = (void*)dint_memory[index1]; *outType = &UA_TYPES[UA_TYPES_UINT32]; return *outPtr != NULL; } }
-            if (type == 'L') { if (index1>=0 && index1<BUFFER_SIZE) { *outPtr = (void*)lint_memory[index1]; *outType = &UA_TYPES[UA_TYPES_UINT64]; return *outPtr != NULL; } }
+            if (type == 'W') { 
+                if (index1>=0 && index1<BUFFER_SIZE && int_memory[index1] != NULL) { 
+                    *outPtr = (void*)int_memory[index1]; 
+                    *outType = &UA_TYPES[UA_TYPES_UINT16]; 
+                    return *outPtr != NULL; 
+                } 
+            }
+            if (type == 'D') { 
+                if (index1>=0 && index1<BUFFER_SIZE && dint_memory[index1] != NULL) { 
+                    *outPtr = (void*)dint_memory[index1]; 
+                    *outType = &UA_TYPES[UA_TYPES_UINT32]; 
+                    return *outPtr != NULL; 
+                } 
+            }
+            if (type == 'L') { 
+                if (index1>=0 && index1<BUFFER_SIZE && lint_memory[index1] != NULL) { 
+                    *outPtr = (void*)lint_memory[index1]; 
+                    *outType = &UA_TYPES[UA_TYPES_UINT64]; 
+                    return *outPtr != NULL; 
+                } 
+            }
+            if (type == 'R') { 
+                if (index1>=0 && index1<BUFFER_SIZE && real_memory[index1] != NULL) { 
+                    *outPtr = (void*)real_memory[index1]; 
+                    *outType = &UA_TYPES[UA_TYPES_FLOAT]; 
+                    return *outPtr != NULL; 
+                } 
+            }
+            if (type == 'F') { 
+                if (index1>=0 && index1<BUFFER_SIZE && lreal_memory[index1] != NULL) { 
+                    *outPtr = (void*)lreal_memory[index1]; 
+                    *outType = &UA_TYPES[UA_TYPES_DOUBLE]; 
+                    return *outPtr != NULL; 
+                } 
+            }
             break;
     }
     return false;

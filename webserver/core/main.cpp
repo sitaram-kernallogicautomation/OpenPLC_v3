@@ -49,6 +49,7 @@ pthread_mutex_t bufferLock; //mutex for the internal buffers
 uint8_t run_openplc = 1; //Variable to control OpenPLC Runtime execution
 //static pthread_t opcua_thread; // OPC UA server thread
 
+
 // pointers to IO *array[const][const] from cpp to c and back again don't work as expected, so instead callbacks
 uint8_t *bool_input_call_back(int a, int b){ return bool_input[a][b]; }
 uint8_t *bool_output_call_back(int a, int b){ return bool_output[a][b]; }

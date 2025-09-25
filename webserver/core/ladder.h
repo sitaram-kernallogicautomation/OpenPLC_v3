@@ -78,10 +78,20 @@ extern IEC_UDINT *dint_output[BUFFER_SIZE];
 extern IEC_ULINT *lint_input[BUFFER_SIZE];
 extern IEC_ULINT *lint_output[BUFFER_SIZE];
 
+//Real Input Variables
+extern IEC_REAL *real_input[BUFFER_SIZE];
+extern IEC_LREAL *lreal_input[BUFFER_SIZE];
+
+//Real Output Variables  
+extern IEC_REAL *real_output[BUFFER_SIZE];
+extern IEC_LREAL *lreal_output[BUFFER_SIZE];
+
 //Memory
 extern IEC_UINT *int_memory[BUFFER_SIZE];
 extern IEC_UDINT *dint_memory[BUFFER_SIZE];
 extern IEC_ULINT *lint_memory[BUFFER_SIZE];
+extern IEC_REAL *real_memory[BUFFER_SIZE];
+extern IEC_LREAL *lreal_memory[BUFFER_SIZE];
 
 //Special Functions
 extern IEC_ULINT *special_functions[BUFFER_SIZE];
