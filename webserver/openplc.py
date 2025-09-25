@@ -270,7 +270,7 @@ class runtime:
 
     def start_opcua(self, port_num):
         return self._rpc(f'start_opcua({port_num})')
-
+    
     def stop_opcua(self):
         return self._rpc(f'stop_opcua()')
  

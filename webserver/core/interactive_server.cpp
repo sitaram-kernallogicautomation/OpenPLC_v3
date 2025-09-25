@@ -50,6 +50,8 @@ bool run_dnp3 = 0;
 uint16_t dnp3_port = 20000;
 bool run_enip = 0;
 uint16_t enip_port = 44818;
+bool run_opcua = 0;
+uint16_t opcua_port = 4840;
 bool run_pstorage = 0;
 uint16_t pstorage_polling = 10;
 unsigned char server_command[1024];
@@ -62,6 +64,7 @@ time_t end_time;
 pthread_t modbus_thread;
 pthread_t dnp3_thread;
 pthread_t enip_thread;
+pthread_t opcua_thread;
 pthread_t pstorage_thread;
 
 //-----------------------------------------------------------------------------
@@ -94,6 +97,15 @@ void *enipThread(void *arg)
     startServer(enip_port, ENIP_PROTOCOL);
     return nullptr;
 
+}
+
+//-----------------------------------------------------------------------------
+// Start the OPC UA Thread
+//-----------------------------------------------------------------------------
+void *opcuaThread(void *arg)
+{
+    opcuaStartServer(opcua_port);
+    return nullptr;
 }
 
 //-----------------------------------------------------------------------------
@@ -430,6 +442,44 @@ void processCommand(unsigned char *buffer, int client_fd)
         }
         processing_command = false;
     }
+    else if (strncmp(buffer, "start_opcua(", 12) == 0)
+    {
+        processing_command = true;
+        opcua_port = readCommandArgument(buffer);
+        sprintf(log_msg, "Issued start_opcua() command on port: %d\n", opcua_port);
+        openplc_log(log_msg);
+        if (run_opcua)
+        {
+            sprintf(log_msg, "OPC UA server already active. Restarting on port: %d\n", opcua_port);
+            openplc_log(log_msg);
+            // Request OPC UA server to stop and wait thread
+            stopOpcua();
+            run_opcua = 0;
+            pthread_join(opcua_thread, NULL);
+            sprintf(log_msg, "OPC UA server was stopped\n");
+            openplc_log(log_msg);
+        }
+        //Start OPC UA server
+        run_opcua = 1;
+        pthread_create(&opcua_thread, NULL, opcuaThread, NULL);
+        processing_command = false;
+    }
+    else if (strncmp(buffer, "stop_opcua()", 12) == 0)
+    {
+        processing_command = true;
+        sprintf(log_msg, "Issued stop_opcua() command\n");
+        openplc_log(log_msg);
+        if (run_opcua)
+        {
+            // Signal server loop to stop and wait thread
+            stopOpcua();
+            run_opcua = 0;
+            pthread_join(opcua_thread, NULL);
+            sprintf(log_msg, "OPC UA server was stopped\n");
+            openplc_log(log_msg);
+        }
+        processing_command = false;
+    }
     else if (strncmp(buffer, "start_pstorage(", 15) == 0)
     {
         processing_command = true;
@@ -587,10 +637,12 @@ void startInteractiveServer(int port)
     run_modbus = 0;
     run_dnp3 = 0;
     run_enip = 0;
+    run_opcua = 0;
     run_pstorage = 0;
     pthread_join(modbus_thread, NULL);
     pthread_join(dnp3_thread, NULL);
     pthread_join(enip_thread, NULL);
+    pthread_join(opcua_thread, NULL);
 
     printf("Closing socket...\n");
     closeSocket(socket_fd);
