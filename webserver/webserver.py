@@ -93,6 +93,13 @@ def configure_runtime():
                     else:
                         print("Disabling EtherNet/IP")
                         openplc_runtime.stop_enip()
+                elif (row[0] == "Opcua_port"):
+                    if (row[1] != "disabled"):
+                        print("Enabling OPC UA on port " + str(int(row[1])))
+                        openplc_runtime.start_opcua(int(row[1]))
+                    else:
+                        print("Disabling OPC UA")
+                        openplc_runtime.stop_opcua()
                 elif (row[0] == "snap7"):
                     if (row[1] != "false"):
                         print("Enabling S7 Protocol")

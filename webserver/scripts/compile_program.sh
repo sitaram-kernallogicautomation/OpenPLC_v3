@@ -48,6 +48,19 @@ else
     ETHERCAT_INC=""
 fi
 
+# Resolve open62541 pkg-config name once and use consistently
+if pkg-config --exists open62541; then
+    OPEN62541_PC="open62541"
+elif pkg-config --exists libopen62541; then
+    OPEN62541_PC="libopen62541"
+else
+    echo "Error: open62541 not found via pkg-config (neither 'open62541' nor 'libopen62541')."
+    echo "Install open62541 or export PKG_CONFIG_PATH accordingly."
+    exit 1
+fi
+
+echo "Using open62541 pkg-config: $OPEN62541_PC (version $(pkg-config --modversion "$OPEN62541_PC"))"
+
 #compiling for each platform
 cd core
 if [ "$OPENPLC_PLATFORM" = "win" ]; then
@@ -68,7 +81,7 @@ if [ "$OPENPLC_PLATFORM" = "win" ]; then
     echo "Generating glueVars..."
     ./glue_generator
     echo "Compiling main program..."
-    g++ *.cpp *.o -o openplc -I ./lib -pthread -fpermissive -I /usr/local/include/modbus -L /usr/local/lib snap7.lib -lmodbus -w 
+    g++ *.cpp *.o -o openplc -I ./lib -pthread -fpermissive -I /usr/local/include/modbus -L /usr/local/lib snap7.lib -lmodbus `pkg-config --cflags --libs "$OPEN62541_PC"` -w 
     if [ $? -ne 0 ]; then
         echo "Error compiling C files"
         echo "Compilation finished with errors!"
@@ -104,9 +117,9 @@ elif [ "$OPENPLC_PLATFORM" = "linux" ]; then
     ./glue_generator
     echo "Compiling main program..."
     if [ "$OPENPLC_DRIVER" = "sl_rp4" ]; then
-        g++ -std=gnu++11 *.cpp *.o -o openplc -I ./lib -pthread -fpermissive `pkg-config --cflags --libs libmodbus` -lsnap7 -lasiodnp3 -lasiopal -lopendnp3 -lopenpal -w $ETHERCAT_INC -DSL_RP4
+        g++ -std=gnu++11 *.cpp *.o -o openplc -I ./lib -pthread -lrt -fpermissive `pkg-config --cflags --libs libmodbus` -lsnap7 -lasiodnp3 -lasiopal -lopendnp3 -lopenpal `pkg-config --cflags --libs "$OPEN62541_PC"` -w $ETHERCAT_INC -DSL_RP4
     else
-        g++ -std=gnu++11 *.cpp *.o -o openplc -I ./lib -pthread -fpermissive `pkg-config --cflags --libs libmodbus` -lsnap7 -lasiodnp3 -lasiopal -lopendnp3 -lopenpal -w $ETHERCAT_INC 
+        g++ -std=gnu++11 *.cpp *.o -o openplc -I ./lib -pthread -lrt -fpermissive `pkg-config --cflags --libs libmodbus` -lsnap7 -lasiodnp3 -lasiopal -lopendnp3 -lopenpal `pkg-config --cflags --libs "$OPEN62541_PC"` -w $ETHERCAT_INC 
     fi
     if [ $? -ne 0 ]; then
         echo "Error compiling C files"
@@ -143,9 +156,9 @@ elif [ "$OPENPLC_PLATFORM" = "rpi" ]; then
     ./glue_generator
     echo "Compiling main program..."
     if [ "$OPENPLC_DRIVER" = "sequent" ]; then
-        g++ -DSEQUENT -std=gnu++11 *.cpp *.o -o openplc -I ./lib -lrt -lwiringPi -lpthread -fpermissive `pkg-config --cflags --libs libmodbus` -lsnap7 -lasiodnp3 -lasiopal -lopendnp3 -lopenpal -w 
+        g++ -DSEQUENT -std=gnu++11 *.cpp *.o -o openplc -I ./lib -lrt -lwiringPi -lpthread -fpermissive `pkg-config --cflags --libs libmodbus` -lsnap7 -lasiodnp3 -lasiopal -lopendnp3 -lopenpal `pkg-config --cflags --libs "$OPEN62541_PC"` -w 
     else
-        g++ -std=gnu++11 *.cpp *.o -o openplc -I ./lib -lrt -lwiringPi -lpthread -fpermissive `pkg-config --cflags --libs libmodbus` -lsnap7 -lasiodnp3 -lasiopal -lopendnp3 -lopenpal -w
+        g++ -std=gnu++11 *.cpp *.o -o openplc -I ./lib -lrt -lwiringPi -lpthread -fpermissive `pkg-config --cflags --libs libmodbus` -lsnap7 -lasiodnp3 -lasiopal -lopendnp3 -lopenpal `pkg-config --cflags --libs "$OPEN62541_PC"` -w
     fi
     if [ $? -ne 0 ]; then
         echo "Error compiling C files"
@@ -174,7 +187,7 @@ elif [ "$OPENPLC_PLATFORM" = "opi" ]; then
     echo "Generating glueVars..."
     ./glue_generator
     echo "Compiling main program..."
-    g++ -std=gnu++11 *.cpp *.o -o openplc -I ./lib -lrt -lpthread -fpermissive `pkg-config --cflags --libs libmodbus` -lsnap7 -lasiodnp3 -lasiopal -lopendnp3 -lopenpal -w $WIRINGOP_INC
+    g++ -std=gnu++11 *.cpp *.o -o openplc -I ./lib -lrt -lpthread -fpermissive `pkg-config --cflags --libs libmodbus` -lsnap7 -lasiodnp3 -lasiopal -lopendnp3 -lopenpal `pkg-config --cflags --libs "$OPEN62541_PC"` -w $WIRINGOP_INC
     if [ $? -ne 0 ]; then
         echo "Error compiling C files"
         echo "Compilation finished with errors!"

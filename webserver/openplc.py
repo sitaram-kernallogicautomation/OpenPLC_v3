@@ -213,7 +213,13 @@ class runtime:
 
     def stop_enip(self):
         return self._rpc(f'stop_enip()')
-    
+
+    def start_opcua(self, port_num):
+        return self._rpc(f'start_opcua({port_num})')
+
+    def stop_opcua(self):
+        return self._rpc(f'stop_opcua()')
+ 
     def start_pstorage(self, poll_rate):
         return self._rpc(f'start_pstorage({poll_rate})')
                 

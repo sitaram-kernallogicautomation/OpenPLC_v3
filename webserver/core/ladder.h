@@ -29,6 +29,7 @@
 #define MODBUS_PROTOCOL     0
 #define DNP3_PROTOCOL       1
 #define ENIP_PROTOCOL       2
+#define OPCUA_PROTOCOL      3
 
 //Internal buffers for I/O and memory. These buffers are defined in the
 //auto-generated glueVars.cpp file
@@ -162,6 +163,17 @@ extern uint8_t rpi_modbus_rts_pin;     // If <> 0, expect hardware RTS to be use
 
 //dnp3.cpp
 void dnp3StartServer(int port);
+
+//opcua.cpp
+void opcuaStartServer(int port);
+void initializeOpcua();
+void finalizeOpcua();
+void stopOpcua();
+// OPC UA thread
+extern pthread_t opcua_thread;
+void *opcuaThread(void *arg);
+// Sync OPC UA shadows from PLC buffers once per cycle
+extern "C" void opcuaUpdateNodeValues();
 
 //persistent_storage.cpp
 void startPstorage();
