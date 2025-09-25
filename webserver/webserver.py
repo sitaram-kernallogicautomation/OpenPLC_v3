@@ -514,9 +514,29 @@ def start_plc():
     if (flask_login.current_user.is_authenticated == False):
         return flask.redirect(flask.url_for('login'))
     else:
+        try:
+            print("Starting PLC from web interface...")
+            monitor.stop_monitor()
+            openplc_runtime.start_runtime()
+            time.sleep(2)  # Give more time for startup
+            configure_runtime()
+            monitor.cleanup()
+            monitor.parse_st(openplc_runtime.project_file)
+            print("PLC started successfully")
+            return flask.redirect(flask.url_for('dashboard'))
+        except Exception as e:
+            print(f"Error starting PLC: {e}")
+            return flask.redirect(flask.url_for('dashboard'))
+
+@app.route('/restart_plc')
+def restart_plc():
+    global openplc_runtime
+    if (flask_login.current_user.is_authenticated == False):
+        return flask.redirect(flask.url_for('login'))
+    else:
         monitor.stop_monitor()
-        openplc_runtime.start_runtime()
-        time.sleep(1)
+        openplc_runtime.restart_runtime()
+        time.sleep(2)
         configure_runtime()
         monitor.cleanup()
         monitor.parse_st(openplc_runtime.project_file)
@@ -529,10 +549,16 @@ def stop_plc():
     if (flask_login.current_user.is_authenticated == False):
         return flask.redirect(flask.url_for('login'))
     else:
-        openplc_runtime.stop_runtime()
-        time.sleep(1)
-        monitor.stop_monitor()
-        return flask.redirect(flask.url_for('dashboard'))
+        try:
+            print("Stopping PLC from web interface...")
+            monitor.stop_monitor()
+            openplc_runtime.stop_runtime()
+            monitor.cleanup()
+            print("PLC stopped successfully")
+            return flask.redirect(flask.url_for('dashboard'))
+        except Exception as e:
+            print(f"Error stopping PLC: {e}")
+            return flask.redirect(flask.url_for('dashboard'))
 
 
 @app.route('/runtime_logs')

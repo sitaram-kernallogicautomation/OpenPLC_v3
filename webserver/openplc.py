@@ -76,6 +76,19 @@ class runtime:
     runtime_status = "Stopped"
     
     def start_runtime(self):
+        # Check if runtime is already running by trying to connect to RPC server
+        try:
+            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            s.settimeout(1)  # Short timeout for quick check
+            s.connect(('localhost', 43628))
+            s.close()
+            print("OpenPLC runtime is already running on port 43628")
+            self.runtime_status = "Running"
+            return
+        except (socket.error, ConnectionRefusedError):
+            # RPC server not running, safe to start
+            pass
+        
         if (self.status() == "Stopped"):
             self.theprocess = subprocess.Popen(['./core/openplc'])  # XXX: iPAS
             self.runtime_status = "Running"
@@ -97,12 +110,44 @@ class runtime:
         return data
 
     def stop_runtime(self):
+        print("Stopping OpenPLC runtime...")
         if (self.status() == "Running"):
-            self._rpc(f'quit()')
+            try:
+                self._rpc(f'quit()')
+                print("Sent quit command to runtime")
+            except Exception as e:
+                print(f"Error sending quit command: {e}")
+                pass  # Ignore errors when stopping
             self.runtime_status = "Stopped"
 
-            while self.theprocess.poll() is None:  # XXX: iPAS, to prevent the defunct killed process.
-                time.sleep(1)  # https://www.reddit.com/r/learnpython/comments/776r96/defunct_python_process_when_using_subprocesspopen/
+            # Wait for process to terminate
+            if hasattr(self, 'theprocess') and self.theprocess:
+                print("Waiting for runtime process to terminate...")
+                timeout = 10  # 10 second timeout
+                while self.theprocess.poll() is None and timeout > 0:  # XXX: iPAS, to prevent the defunct killed process.
+                    time.sleep(1)  # https://www.reddit.com/r/learnpython/comments/776r96/defunct_python_process_when_using_subprocesspopen/
+                    timeout -= 1
+                
+                if timeout <= 0:
+                    print("Timeout waiting for runtime to stop, force killing...")
+                    try:
+                        self.theprocess.terminate()
+                        self.theprocess.wait(timeout=5)
+                    except:
+                        try:
+                            self.theprocess.kill()
+                        except:
+                            pass
+                
+                self.theprocess = None
+                print("Runtime process terminated")
+    
+    def restart_runtime(self):
+        """Force restart the runtime by stopping any existing instance and starting fresh"""
+        print("Force restarting OpenPLC runtime...")
+        self.stop_runtime()
+        time.sleep(2)  # Give time for cleanup
+        self.start_runtime()
     
     def compile_program(self, st_file):
         if (self.status() == "Running"):
@@ -185,10 +230,19 @@ class runtime:
             if (compilation_object.end_of_stream == False):
                 return "Compiling"
 
-        if not self._rpc('exec_time()', 10000):
+        # Try to connect to RPC server to check if runtime is actually running
+        try:
+            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            s.settimeout(2)  # Short timeout
+            s.connect(('localhost', 43628))
+            s.close()
+            # If we can connect, runtime is running
+            self.runtime_status = "Running"
+            return self.runtime_status
+        except (socket.error, ConnectionRefusedError):
+            # Cannot connect, runtime is stopped
             self.runtime_status = "Stopped"
-
-        return self.runtime_status
+            return self.runtime_status
 
     def start_modbus(self, port_num):
         return self._rpc(f'start_modbus({port_num})')
