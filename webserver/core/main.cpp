@@ -212,10 +212,6 @@ int main(int argc,char **argv)
         handleSpecialFunctions();
         config_run__(__tick++); // execute plc program logic
         
-        // Debug: log that we're updating OPC UA values
-        if (__tick % 100 == 0) { // Log every 100 cycles to avoid spam
-            printf("PLC cycle %lu: Updating OPC UA values\n", __tick);
-        }
         
         // Update Modbus outputs while holding the lock
         updateBuffersOut_MB(); //update slave devices with data from the output image table

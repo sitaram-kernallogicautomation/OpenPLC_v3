@@ -723,6 +723,7 @@ static void createProgramVariablesFolder(UA_Server *server, UA_NodeId *outFolder
 // Resolve pointer and UA type from IEC location token like %IX0.0, %QW10, %MD954
 static bool resolvePointerFromLocation(const char *location, void **outPtr, const UA_DataType **outType) {
     if (!location || !outPtr || !outType) return false;
+    char debug_msg[256]; // Declare debug_msg in this function scope
     // Expect a leading '%'
     if (location[0] != '%') return false;
     char area = location[1]; // I,Q,M
@@ -814,11 +815,19 @@ static bool resolvePointerFromLocation(const char *location, void **outPtr, cons
                 } 
             }
             if (type == 'W') { 
+                sprintf(debug_msg, "Checking int_output[%d]: ptr=%p, BUFFER_SIZE=%d\n", 
+                        index1, int_output[index1], BUFFER_SIZE);
+                openplc_log(debug_msg);
                 if (index1>=0 && index1<BUFFER_SIZE && int_output[index1] != NULL) { 
                     *outPtr = (void*)int_output[index1]; 
                     *outType = &UA_TYPES[UA_TYPES_UINT16]; 
+                    sprintf(debug_msg, "Successfully mapped int_output[%d] -> ptr=%p\n", index1, *outPtr);
+                    openplc_log(debug_msg);
                     return *outPtr != NULL; 
-                } 
+                } else {
+                    sprintf(debug_msg, "int_output[%d] is NULL or out of bounds\n", index1);
+                    openplc_log(debug_msg);
+                }
             }
             if (type == 'D') { 
                 if (index1>=0 && index1<BUFFER_SIZE && dint_output[index1] != NULL) { 
@@ -896,6 +905,13 @@ static bool resolvePointerFromLocation(const char *location, void **outPtr, cons
 static int createNodesFromLocatedVariables(UA_Server *server) {
     UA_NodeId programFolder;
     createProgramVariablesFolder(server, &programFolder);
+    char debug_msg[256]; // Declare debug_msg at the beginning of the function
+    
+    // Debug: Check buffer state before parsing
+    sprintf(debug_msg, "Buffer state: int_output[0]=%p, bool_output[4][0]=%p, bool_output[4][2]=%p\n", 
+            int_output[0], bool_output[4][0], bool_output[4][2]);
+    openplc_log(debug_msg);
+    
 
     // Try multiple common locations for LOCATED_VARIABLES.h
     const char *hdrCandidates[] = {
@@ -921,12 +937,19 @@ static int createNodesFromLocatedVariables(UA_Server *server) {
     int seen = 0;
     char line[1024];
     while (fgets(line, sizeof(line), f)) {
+        // Debug: Log every line being read
+        sprintf(debug_msg, "Reading line: %s", line);
+        openplc_log(debug_msg);
         // Trim leading spaces
         char *p = line;
         while (*p==' ' || *p=='\t' || *p=='\r' || *p=='\n') p++;
         // Quick filter: look for macro substring
         if (strstr(p, "__LOCATED_VAR(") == NULL) continue;
         seen++;
+        
+        // Debug: Log that we found a __LOCATED_VAR line
+        sprintf(debug_msg, "Found __LOCATED_VAR line: %s", p);
+        openplc_log(debug_msg);
         // Extract inside parentheses
         char *lpar = strchr(p, '(');
         char *rpar = lpar ? strrchr(lpar, ')') : NULL;
@@ -937,7 +960,22 @@ static int createNodesFromLocatedVariables(UA_Server *server) {
         // Tokenize by comma
         char *tokens[8]; int n=0; char *saveptr=NULL; char *tok = strtok_r(args, ",", &saveptr);
         while (tok && n<8) { tokens[n++] = tok; tok = strtok_r(NULL, ",", &saveptr); }
-        if (n < 6) continue;
+        
+        // Debug: Log tokenization results
+        sprintf(debug_msg, "Tokenized %d tokens: ", n);
+        for (int i = 0; i < n; i++) {
+            char temp[64];
+            sprintf(temp, "[%d]=%s ", i, tokens[i]);
+            strcat(debug_msg, temp);
+        }
+        strcat(debug_msg, "\n");
+        openplc_log(debug_msg);
+        
+        if (n < 5) {
+            sprintf(debug_msg, "Skipping: insufficient tokens (need at least 5, got %d)\n", n);
+            openplc_log(debug_msg);
+            continue;
+        }
 
         // tokens: [0]=IEC type, [1]=__NAME, [2]=Area(I/Q/M), [3]=Type(X/B/W/D/L), [4]=idx1, [5]=idx2
         char *nameTok = tokens[1];
@@ -946,6 +984,11 @@ static int createNodesFromLocatedVariables(UA_Server *server) {
         // Make a copy for display name
         char dispName[128];
         snprintf(dispName, sizeof(dispName), "%s", nameTok);
+        
+        // Debug: Log what we're parsing
+        sprintf(debug_msg, "Parsing variable: name=%s, area=%c, type=%c, idx1=%d, idx2=%d\n", 
+                dispName, tokens[2][0], tokens[3][0], atoi(tokens[4]), (n>=6) ? atoi(tokens[5]) : 0);
+        openplc_log(debug_msg);
 
         // Compose a location string to reuse resolver
         while (tokens[2][0]==' '||tokens[2][0]=='\t') tokens[2]++;
@@ -954,13 +997,27 @@ static int createNodesFromLocatedVariables(UA_Server *server) {
         char typ = tokens[3][0];
         int idx1 = atoi(tokens[4]);
         int idx2 = (n>=6) ? atoi(tokens[5]) : 0;
+        
+        // Debug: Log the parsed values
+        sprintf(debug_msg, "Parsed values: area=%c, type=%c, idx1=%d, idx2=%d\n", area, typ, idx1, idx2);
+        openplc_log(debug_msg);
 
         char location[64];
         if (typ == 'X') snprintf(location, sizeof(location), "%%%cX%d.%d", area, idx1, idx2);
         else snprintf(location, sizeof(location), "%%%c%c%d", area, typ, idx1);
+        
+        // Debug: Log the location string
+        sprintf(debug_msg, "Generated location string: %s\n", location);
+        openplc_log(debug_msg);
 
         void *ptr = NULL; const UA_DataType *uaType = NULL;
-        if (!resolvePointerFromLocation(location, &ptr, &uaType)) continue;
+        if (!resolvePointerFromLocation(location, &ptr, &uaType)) {
+            char log_msg[256];
+            sprintf(log_msg, "Failed to resolve: %s (area=%c, type=%c, idx1=%d, idx2=%d)\n", 
+                    location, area, typ, idx1, idx2);
+            openplc_log(log_msg);
+            continue;
+        }
 
         static UA_UInt32 nextId = 4000000;
         UA_NodeId nodeId = UA_NODEID_NUMERIC(g_namespace_index, nextId++);
