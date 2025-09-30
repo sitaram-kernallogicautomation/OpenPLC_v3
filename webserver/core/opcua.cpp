@@ -492,21 +492,10 @@ extern "C" void opcuaUpdateNodeValues() {
     
     pthread_mutex_lock(&opcua_mutex);
     OpcNodeInfo *it = g_node_list;
-    
-    // Debug: log how many nodes we're updating
     int nodeCount = 0;
+    
     while (it != NULL) {
         nodeCount++;
-        it = it->next;
-    }
-    
-    // Always log the count, even if 0
-    char debug_msg[200];
-    //sprintf(debug_msg, "Updating %d OPC UA nodes (server=%p, running=%d)\n", nodeCount, (void*)g_opcua_server, g_opcua_running);
-    openplc_log(debug_msg);
-    
-    it = g_node_list;
-    while (it != NULL) {
         if (it->variablePtr && it->dataType) {
             UA_Variant value;
             UA_Variant_init(&value);
@@ -560,6 +549,12 @@ extern "C" void opcuaUpdateNodeValues() {
         }
         it = it->next;
     }
+    
+    // Optionally log the total nodes processed
+    // char debug_msg[200];
+    // sprintf(debug_msg, "Processed %d OPC UA nodes\n", nodeCount);
+    // openplc_log(debug_msg);
+    
     pthread_mutex_unlock(&opcua_mutex);
 }
 
