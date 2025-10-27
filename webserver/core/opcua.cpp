@@ -588,18 +588,18 @@ static void createFolderStructure(UA_Server *server) {
     // Create main OpenPLC folder
     UA_NodeId openplcFolder = UA_NODEID_NUMERIC(g_namespace_index, 1000);
     UA_ObjectAttributes openplcAttr = UA_ObjectAttributes_default;
-    openplcAttr.displayName = UA_LOCALIZEDTEXT("en-US", "OpenPLC");
-    openplcAttr.description = UA_LOCALIZEDTEXT("en-US", "OpenPLC Runtime Variables");
+    openplcAttr.displayName = UA_LOCALIZEDTEXT("en-US", "KernServer");
+    openplcAttr.description = UA_LOCALIZEDTEXT("en-US", "PLC Runtime Variables");
     
     UA_StatusCode retval = UA_Server_addObjectNode(server, openplcFolder, objectsFolder,
                            UA_NODEID_NUMERIC(0, UA_NS0ID_HASCOMPONENT),
-                           UA_QUALIFIEDNAME(g_namespace_index, "OpenPLC"),
+                           UA_QUALIFIEDNAME(g_namespace_index, "KernServer"),
                            UA_NODEID_NUMERIC(0, UA_NS0ID_FOLDERTYPE),
                            openplcAttr, NULL, NULL);
     
     if (retval != UA_STATUSCODE_GOOD && retval != UA_STATUSCODE_BADNODEIDEXISTS) {
         char log_msg[1000];
-        sprintf(log_msg, "Failed to create OpenPLC folder: %s\n", UA_StatusCode_name(retval));
+        sprintf(log_msg, "Failed to create kernServer folder: %s\n", UA_StatusCode_name(retval));
         openplc_log(log_msg);
     }
     
@@ -896,11 +896,144 @@ static bool resolvePointerFromLocation(const char *location, void **outPtr, cons
 
 // Parse VARIABLES.csv and create one node per PLC program variable
 
+// Structure to hold variable name mapping
+typedef struct VariableMapping {
+    char technicalName[64];
+    char displayName[128];
+    int index; // Index in the CSV for ordering
+    struct VariableMapping *next;
+} VariableMapping;
+
+// Parse VARIABLES.csv to create a mapping from technical names to display names
+static VariableMapping* parseVariablesCsv() {
+    VariableMapping *head = NULL;
+    FILE *f = fopen("VARIABLES.csv", "r");
+    if (!f) {
+        // Try alternative locations
+        const char *candidates[] = {
+            "./VARIABLES.csv",
+            "core/VARIABLES.csv",
+            "./core/VARIABLES.csv",
+            "../core/VARIABLES.csv",
+            "../VARIABLES.csv"
+        };
+        for (size_t i = 0; i < sizeof(candidates)/sizeof(candidates[0]); i++) {
+            f = fopen(candidates[i], "r");
+            if (f) break;
+        }
+    }
+    
+    if (!f) {
+        char log_msg[256];
+        sprintf(log_msg, "VARIABLES.csv not found, will use technical names\n");
+        openplc_log(log_msg);
+        return NULL;
+    }
+    
+    char line[1024];
+    int csvIndex = 0;
+    while (fgets(line, sizeof(line), f)) {
+        // Skip comments and empty lines
+        if (line[0] == '/' || line[0] == '\n' || line[0] == '\r') continue;
+        
+        // Parse CSV line: ID;TYPE;TECHNICAL_NAME;DISPLAY_NAME;DATA_TYPE;...
+        char *tokens[8];
+        int tokenCount = 0;
+        char *saveptr = NULL;
+        char *token = strtok_r(line, ";", &saveptr);
+        
+        while (token && tokenCount < 8) {
+            tokens[tokenCount++] = token;
+            token = strtok_r(NULL, ";", &saveptr);
+        }
+        
+        // Only process lines with at least 4 tokens AND type is a variable type (skip FB, PROGRAM, etc.)
+        if (tokenCount >= 4 && tokens[1] && 
+            (strcmp(tokens[1], "IN") == 0 || strcmp(tokens[1], "OUT") == 0 || 
+             strcmp(tokens[1], "INOUT") == 0 || strcmp(tokens[1], "VAR") == 0 ||
+             strcmp(tokens[1], "TEMP") == 0 || strcmp(tokens[1], "EXTERNAL") == 0 ||
+             strcmp(tokens[1], "GLOBAL") == 0 || strcmp(tokens[1], "LOCATED") == 0)) {
+            // tokens[2] = technical name, tokens[3] = display name
+            // Extract just the variable name from the full path (e.g., "CONFIG0.RES0.INSTANCE0.XPUSHBUTTON" -> "XPUSHBUTTON")
+            char *fullPath = tokens[2];
+            char *varName = strrchr(fullPath, '.');
+            if (varName) {
+                varName++; // Skip the '.'
+            } else {
+                varName = fullPath; // Use full path if no '.' found
+            }
+            
+            VariableMapping *mapping = (VariableMapping*)malloc(sizeof(VariableMapping));
+            if (mapping) {
+                snprintf(mapping->technicalName, sizeof(mapping->technicalName), "%s", varName);
+                snprintf(mapping->displayName, sizeof(mapping->displayName), "%s", tokens[3]);
+                mapping->index = csvIndex++;
+                mapping->next = head;
+                head = mapping;
+                
+                // Debug: log the mapping
+                char debug_msg[256];
+                sprintf(debug_msg, "Mapped[%d]: '%s' -> '%s'\n", mapping->index, mapping->technicalName, mapping->displayName);
+                openplc_log(debug_msg);
+            }
+        }
+    }
+    fclose(f);
+    
+    // Count mappings
+    int mappingCount = 0;
+    VariableMapping *temp = head;
+    while (temp) {
+        mappingCount++;
+        temp = temp->next;
+    }
+    
+    char log_msg[256];
+    sprintf(log_msg, "Parsed VARIABLES.csv, created %d mappings\n", mappingCount);
+    openplc_log(log_msg);
+    
+    return head;
+}
+
+// Find display name for a technical name
+static const char* findDisplayName(VariableMapping *mapping, const char *technicalName) {
+    while (mapping) {
+        if (strcmp(mapping->technicalName, technicalName) == 0) {
+            return mapping->displayName;
+        }
+        mapping = mapping->next;
+    }
+    return technicalName; // Return technical name if no mapping found
+}
+
+// Find display name by index (for cases where names don't match but order does)
+static const char* findDisplayNameByIndex(VariableMapping *mapping, int index) {
+    while (mapping) {
+        if (mapping->index == index) {
+            return mapping->displayName;
+        }
+        mapping = mapping->next;
+    }
+    return NULL; // Return NULL if no mapping found
+}
+
+// Free variable mapping
+static void freeVariableMapping(VariableMapping *mapping) {
+    while (mapping) {
+        VariableMapping *next = mapping->next;
+        free(mapping);
+        mapping = next;
+    }
+}
+
 // Fallback: parse LOCATED_VARIABLES.h entries like __LOCATED_VAR(BOOL,__QX0_1,Q,X,0,1)
 static int createNodesFromLocatedVariables(UA_Server *server) {
     UA_NodeId programFolder;
     createProgramVariablesFolder(server, &programFolder);
     char debug_msg[256]; // Declare debug_msg at the beginning of the function
+    
+    // Parse VARIABLES.csv to get display names
+    VariableMapping *varMapping = parseVariablesCsv();
     
     // Debug: Check buffer state before parsing
     sprintf(debug_msg, "Buffer state: int_output[0]=%p, bool_output[4][0]=%p, bool_output[4][2]=%p\n", 
@@ -930,6 +1063,7 @@ static int createNodesFromLocatedVariables(UA_Server *server) {
     }
     int added = 0;
     int seen = 0;
+    int locatedVarIndex = 0; // Track index of located variables
     char line[1024];
     while (fgets(line, sizeof(line), f)) {
         // Debug: Log every line being read
@@ -976,13 +1110,23 @@ static int createNodesFromLocatedVariables(UA_Server *server) {
         char *nameTok = tokens[1];
         while (*nameTok==' '||*nameTok=='\t') nameTok++;
         if (strncmp(nameTok, "__", 2) == 0) nameTok += 2; // strip leading __
-        // Make a copy for display name
+        
+        // Try to find display name by technical name first, then by index
+        const char *displayName = findDisplayName(varMapping, nameTok);
+        if (strcmp(displayName, nameTok) == 0) {
+            // No match found, try by index
+            displayName = findDisplayNameByIndex(varMapping, locatedVarIndex);
+            if (!displayName) {
+                displayName = nameTok; // Fallback to technical name
+            }
+        }
+        
         char dispName[128];
-        snprintf(dispName, sizeof(dispName), "%s", nameTok);
+        snprintf(dispName, sizeof(dispName), "%s", displayName);
         
         // Debug: Log what we're parsing
-        sprintf(debug_msg, "Parsing variable: name=%s, area=%c, type=%c, idx1=%d, idx2=%d\n", 
-                dispName, tokens[2][0], tokens[3][0], atoi(tokens[4]), (n>=6) ? atoi(tokens[5]) : 0);
+        sprintf(debug_msg, "Parsing variable[%d]: technical='%s', display='%s', area=%c, type=%c, idx1=%d, idx2=%d\n", 
+                locatedVarIndex, nameTok, dispName, tokens[2][0], tokens[3][0], atoi(tokens[4]), (n>=6) ? atoi(tokens[5]) : 0);
         openplc_log(debug_msg);
 
         // Compose a location string to reuse resolver
@@ -1018,6 +1162,7 @@ static int createNodesFromLocatedVariables(UA_Server *server) {
         UA_NodeId nodeId = UA_NODEID_NUMERIC(g_namespace_index, nextId++);
         addVariableNode(server, dispName, programFolder, nodeId, ptr, (UA_DataType*)uaType);
         added++;
+        locatedVarIndex++; // Increment index for next variable
     }
     fclose(f);
     if (added == 0) {
@@ -1025,6 +1170,10 @@ static int createNodesFromLocatedVariables(UA_Server *server) {
         sprintf(log_msg, "No located variables found in LOCATED_VARIABLES.h (seen %d macro lines)\n", seen);
         openplc_log(log_msg);
     }
+    
+    // Clean up variable mapping
+    freeVariableMapping(varMapping);
+    
     return added;
 }
 
