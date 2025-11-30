@@ -2,7 +2,7 @@ login_head = """
 <!DOCTYPE html>
 <html>
     <style>
-        @import url(https://fonts.googleapis.com/css?family=Roboto:300);
+        @import url(/static/fonts/roboto/roboto.css);
         .top {
             position:absolute;
             left:0; right:0; top:0;
@@ -134,7 +134,7 @@ login_body = """
                     <button>login</button>
                 </form>
               </div>
-              <h3 style="font-family:'roboto', sans-serif; font-size:14px; color:#ffffff;">Release: 2025-09-10</h3>
+              <h3 style="font-family:'roboto', sans-serif; font-size:14px; color:#ffffff;">Release: 2025-10-22</h3>
             </div>
         </div>
     </body>

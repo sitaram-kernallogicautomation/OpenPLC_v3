@@ -3,8 +3,9 @@ import subprocess
 import socket
 import errno
 import time
-from threading import Thread
+from threading import Thread, Lock
 from queue import Queue, Empty
+import os
 import os.path
 
 intervals = (
@@ -70,11 +71,16 @@ class NonBlockingStreamReader:
 class UnexpectedEndOfStream(Exception): pass
 
 class runtime:
-    project_file = ""
-    project_name = ""
-    project_description = ""
-    runtime_status = "Stopped"
-    
+    def __init__(self):
+        self.project_file = ""
+        self.project_name = ""
+        self.project_description = ""
+        self.compilation_status_str = ""
+        self.compilation_error_str = ""
+        self.compilation_object = None
+        self.compilation_error = None
+        self.runtime_status = "Stopped"
+
     def start_runtime(self):
         # Check if runtime is already running by trying to connect to RPC server
         try:
@@ -154,21 +160,33 @@ class runtime:
             self.stop_runtime()
         
         self.is_compiling = True
-        global compilation_status_str
-        global compilation_object
-        compilation_status_str = ""
+        self.compilation_status_str = ""
         
         # Extract debug information from program
-        f = open('./st_files/' + st_file, "r")
-        combined_lines = f.read()
-        f.close()
+        with open('./st_files/' + st_file, "r") as f:
+            combined_lines = f.read()
+
         combined_lines = combined_lines.split('\n')
         program_lines = []
         c_debug_lines = []
+        file_lines = {}
 
         for line in combined_lines:
             if line.startswith('(*DBG:') and line.endswith('*)'):
                 c_debug_lines.append(line[6:-2])
+            elif line.startswith('(*FILE:c_blocks_code.cpp') and 'extern "C" void' in line:
+                # This is a hack to backport runtime v4 C/C++ functionality to v3. The v3 runtime needs to
+                # exclude all extern "C" declarations from the c_blocks_code.cpp file. I know this is not
+                # pretty, but v3 architecture is not pretty, so we are doing this here so that v4 code
+                # can remain pretty.
+                pass
+            elif line.startswith('(*FILE:') and line.endswith('*)'):
+                file_content = line[7:-2].strip()
+                if ' ' in file_content:
+                    file_path, file_line = file_content.split(' ', 1)
+                    if file_path not in file_lines:
+                        file_lines[file_path] = []
+                    file_lines[file_path].append(file_line)
             else:
                 program_lines.append(line)
 
@@ -177,58 +195,80 @@ class runtime:
             # Could not find debug info on program uploaded
             if os.path.isfile('./st_files/' + st_file + '.dbg'):
                 # Debugger info exists on file - open it
-                f = open('./st_files/' + st_file + '.dbg', "r")
-                c_debug = f.read()
-                f.close()
+                with open('./st_files/' + st_file + '.dbg', "r") as f:
+                    c_debug = f.read()
+
             else:
                 # No debug info... probably a program generated from the old editor. Use the blank debug info just to compile the program
-                f = open('./core/debug.blank', "r")
-                c_debug = f.read()
-                f.close()
+                with open('./core/debug.blank', "r") as f:
+                    c_debug = f.read()
+                    f.close()
 
             # Write c_debug file
-            f = open('./core/debug.cpp', "w")
-            f.write(c_debug)
-            f.close()
+            with open('./core/debug.cpp', "w") as f:
+                f.write(c_debug)
+
+            for file_path, lines in file_lines.items():
+                full_path = os.path.join('./core', file_path)
+                os.makedirs(os.path.dirname(full_path), exist_ok=True)
+                with open(full_path, "w") as f:
+                    f.write('\n'.join(lines))
 
             # Start compilation
-            a = subprocess.Popen(['./scripts/compile_program.sh', str(st_file)], stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-            compilation_object = NonBlockingStreamReader(a.stdout)
+            try:
+                a = subprocess.Popen(['./scripts/compile_program.sh', str(st_file)], stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+                self.compilation_object = NonBlockingStreamReader(a.stdout)
+                # self.compilation_error = NonBlockingStreamReader(a.stderr)
+            except Exception as e:
+                print(f"Error starting compilation: {e}")
         else:
             # Debug info was extracted from program
             program = '\n'.join(program_lines)
             c_debug = '\n'.join(c_debug_lines)
 
             # Write c_debug file
-            f = open('./core/debug.cpp', "w")
-            f.write(c_debug)
-            f.close()
+            with open('./core/debug.cpp', "w") as f:
+                f.write(c_debug)
+
+            for file_path, lines in file_lines.items():
+                full_path = os.path.join('./core', file_path)
+                os.makedirs(os.path.dirname(full_path), exist_ok=True)
+                with open(full_path, "w") as f:
+                    f.write('\n'.join(lines))
 
             #Write program and debug files
-            f = open('./st_files/' + st_file, "w")
-            f.write(program)
-            f.close()
-            f = open('./st_files/' + st_file + '.dbg', "w")
-            f.write(c_debug)
-            f.close()
+            with open('./st_files/' + st_file, "w") as f:
+                f.write(program)
+
+            with open('./st_files/' + st_file + '.dbg', "w") as f:
+                f.write(c_debug)
 
             # Start compilation
             a = subprocess.Popen(['./scripts/compile_program.sh', str(st_file)], stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-            compilation_object = NonBlockingStreamReader(a.stdout)
+            self.compilation_object = NonBlockingStreamReader(a.stdout)
+            # self.compilation_error = NonBlockingStreamReader(a.stderr)
     
     def compilation_status(self):
-        global compilation_status_str
-        global compilation_object
-        while compilation_object != None:
-            line = compilation_object.readline()
+        while self.compilation_object != None:
+            line = self.compilation_object.readline()
             if not line: break
-            compilation_status_str += line
-        return compilation_status_str
+            self.compilation_status_str += line
+        return self.compilation_status_str
+
+    def get_compilation_error(self):
+        while self.compilation_error != None:
+            line = self.compilation_error.readline()
+            if not line: break
+            self.compilation_error_str += line
+        return self.compilation_error_str
 
     def status(self):
-        if ('compilation_object' in globals()):
-            if (compilation_object.end_of_stream == False):
-                return "Compiling"
+        try:
+            if (self.compilation_object != None):
+                if (self.compilation_object.end_of_stream == False):
+                    return "Compiling"
+        except Exception as e:
+            print(f"Error checking compilation status: {e}")
 
         # Try to connect to RPC server to check if runtime is actually running
         try:
