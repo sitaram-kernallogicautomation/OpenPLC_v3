@@ -894,8 +894,6 @@ static bool resolvePointerFromLocation(const char *location, void **outPtr, cons
     return false;
 }
 
-// Parse VARIABLES.csv and create one node per PLC program variable
-
 // Structure to hold variable name mapping
 typedef struct VariableMapping {
     char technicalName[64];
@@ -904,94 +902,79 @@ typedef struct VariableMapping {
     struct VariableMapping *next;
 } VariableMapping;
 
-// Parse VARIABLES.csv to create a mapping from technical names to display names
-static VariableMapping* parseVariablesCsv() {
+// Try OPCUA_VARIABLES.csv first (simple mapping file), then fallback to VARIABLES.csv
+static VariableMapping* parseOpcuaVariablesCsv() {
     VariableMapping *head = NULL;
-    FILE *f = fopen("VARIABLES.csv", "r");
-    if (!f) {
-        // Try alternative locations
-        const char *candidates[] = {
-            "./VARIABLES.csv",
-            "core/VARIABLES.csv",
-            "./core/VARIABLES.csv",
-            "../core/VARIABLES.csv",
-            "../VARIABLES.csv"
-        };
-        for (size_t i = 0; i < sizeof(candidates)/sizeof(candidates[0]); i++) {
-            f = fopen(candidates[i], "r");
-            if (f) break;
-        }
+    const char *candidates[] = {
+        "OPCUA_VARIABLES.csv",
+        "./OPCUA_VARIABLES.csv",
+        "core/OPCUA_VARIABLES.csv",
+        "./core/OPCUA_VARIABLES.csv",
+        "../core/OPCUA_VARIABLES.csv",
+        "../OPCUA_VARIABLES.csv"
+    };
+    FILE *f = NULL;
+    for (size_t i = 0; i < sizeof(candidates)/sizeof(candidates[0]); i++) {
+        f = fopen(candidates[i], "r");
+        if (f) break;
     }
-    
-    if (!f) {
-        char log_msg[256];
-        sprintf(log_msg, "VARIABLES.csv not found, will use technical names\n");
-        openplc_log(log_msg);
-        return NULL;
-    }
-    
+    if (!f) return NULL; // not present
+
+    char log_msg[256];
+    sprintf(log_msg, "Using OPCUA_VARIABLES.csv for node creation\n");
+    openplc_log(log_msg);
+
     char line[1024];
     int csvIndex = 0;
+    int isHeaderChecked = 0;
     while (fgets(line, sizeof(line), f)) {
-        // Skip comments and empty lines
-        if (line[0] == '/' || line[0] == '\n' || line[0] == '\r') continue;
-        
-        // Parse CSV line: ID;TYPE;TECHNICAL_NAME;DISPLAY_NAME;DATA_TYPE;...
-        char *tokens[8];
+        // Skip comments (# or //) and empty
+        if (line[0] == '\n' || line[0] == '\r' || line[0] == '#') continue;
+        if (line[0] == '/' && line[1] == '/') continue;
+
+        // CSV format: name,location,datatype
+        char *tokens[4];
         int tokenCount = 0;
         char *saveptr = NULL;
-        char *token = strtok_r(line, ";", &saveptr);
-        
-        while (token && tokenCount < 8) {
-            tokens[tokenCount++] = token;
-            token = strtok_r(NULL, ";", &saveptr);
+        char *token = strtok_r(line, ",", &saveptr);
+        while (token && tokenCount < 4) { tokens[tokenCount++] = token; token = strtok_r(NULL, ",", &saveptr); }
+        if (tokenCount < 2) continue;
+
+        // Trim whitespace and newlines
+        for (int i = 0; i < tokenCount; i++) {
+            while (*tokens[i]==' '||*tokens[i]=='\t') tokens[i]++;
+            size_t L = strlen(tokens[i]);
+            while (L>0 && (tokens[i][L-1]=='\n' || tokens[i][L-1]=='\r' || tokens[i][L-1]==' ' || tokens[i][L-1]=='\t')) {
+                tokens[i][--L] = '\0';
+            }
         }
-        
-        // Only process lines with at least 4 tokens AND type is a variable type (skip FB, PROGRAM, etc.)
-        if (tokenCount >= 4 && tokens[1] && 
-            (strcmp(tokens[1], "IN") == 0 || strcmp(tokens[1], "OUT") == 0 || 
-             strcmp(tokens[1], "INOUT") == 0 || strcmp(tokens[1], "VAR") == 0 ||
-             strcmp(tokens[1], "TEMP") == 0 || strcmp(tokens[1], "EXTERNAL") == 0 ||
-             strcmp(tokens[1], "GLOBAL") == 0 || strcmp(tokens[1], "LOCATED") == 0)) {
-            // tokens[2] = technical name, tokens[3] = display name
-            // Extract just the variable name from the full path (e.g., "CONFIG0.RES0.INSTANCE0.XPUSHBUTTON" -> "XPUSHBUTTON")
-            char *fullPath = tokens[2];
-            char *varName = strrchr(fullPath, '.');
-            if (varName) {
-                varName++; // Skip the '.'
-            } else {
-                varName = fullPath; // Use full path if no '.' found
-            }
-            
-            VariableMapping *mapping = (VariableMapping*)malloc(sizeof(VariableMapping));
-            if (mapping) {
-                snprintf(mapping->technicalName, sizeof(mapping->technicalName), "%s", varName);
-                snprintf(mapping->displayName, sizeof(mapping->displayName), "%s", tokens[3]);
-                mapping->index = csvIndex++;
-                mapping->next = head;
-                head = mapping;
-                
-                // Debug: log the mapping
-                char debug_msg[256];
-                sprintf(debug_msg, "Mapped[%d]: '%s' -> '%s'\n", mapping->index, mapping->technicalName, mapping->displayName);
-                openplc_log(debug_msg);
-            }
+
+        // Skip header line if present
+        if (!isHeaderChecked) {
+            isHeaderChecked = 1;
+            if (strcasecmp(tokens[0], "name") == 0) continue;
+        }
+
+        const char *name = tokens[0];
+        const char *location = tokens[1];
+        // datatype (tokens[2]) is optional for now
+
+        // Store mapping->displayName = name, mapping->technicalName = location
+        VariableMapping *mapping = (VariableMapping*)malloc(sizeof(VariableMapping));
+        if (mapping) {
+            snprintf(mapping->technicalName, sizeof(mapping->technicalName), "%s", location);
+            snprintf(mapping->displayName, sizeof(mapping->displayName), "%s", name);
+            mapping->index = csvIndex++;
+            mapping->next = head;
+            head = mapping;
         }
     }
     fclose(f);
-    
-    // Count mappings
-    int mappingCount = 0;
-    VariableMapping *temp = head;
-    while (temp) {
-        mappingCount++;
-        temp = temp->next;
-    }
-    
-    char log_msg[256];
-    sprintf(log_msg, "Parsed VARIABLES.csv, created %d mappings\n", mappingCount);
+
+    // Log count
+    int count = 0; for (VariableMapping *t = head; t; t = t->next) count++;
+    sprintf(log_msg, "Parsed OPCUA_VARIABLES.csv, created %d mappings\n", count);
     openplc_log(log_msg);
-    
     return head;
 }
 
@@ -1032,8 +1015,28 @@ static int createNodesFromLocatedVariables(UA_Server *server) {
     createProgramVariablesFolder(server, &programFolder);
     char debug_msg[256]; // Declare debug_msg at the beginning of the function
     
-    // Parse VARIABLES.csv to get display names
-    VariableMapping *varMapping = parseVariablesCsv();
+    // Prefer OPCUA_VARIABLES.csv; if present, USE ONLY it and skip LOCATED_VARIABLES.h
+    VariableMapping *varMapping = parseOpcuaVariablesCsv();
+    if (varMapping) {
+        int addedFromCsv = 0;
+        for (VariableMapping *m = varMapping; m != NULL; m = m->next) {
+            const char *nodeName = m->displayName;    // friendly name
+            const char *location = m->technicalName;  // IEC location like %QX0.0
+            void *ptr = NULL; const UA_DataType *uaType = NULL;
+            if (!resolvePointerFromLocation(location, &ptr, &uaType)) {
+                char log_msg[256];
+                sprintf(log_msg, "OPCUA_VARIABLES.csv: failed to resolve %s for '%s'\n", location, nodeName);
+                openplc_log(log_msg);
+                continue;
+            }
+            static UA_UInt32 nextId = 4000000;
+            UA_NodeId nodeId = UA_NODEID_NUMERIC(g_namespace_index, nextId++);
+            addVariableNode(server, nodeName, programFolder, nodeId, ptr, (UA_DataType*)uaType);
+            addedFromCsv++;
+        }
+        freeVariableMapping(varMapping);
+        return addedFromCsv;
+    }
     
     // Debug: Check buffer state before parsing
     sprintf(debug_msg, "Buffer state: int_output[0]=%p, bool_output[4][0]=%p, bool_output[4][2]=%p\n", 
