@@ -29,6 +29,7 @@
 #define MODBUS_PROTOCOL     0
 #define DNP3_PROTOCOL       1
 #define ENIP_PROTOCOL       2
+#define OPCUA_PROTOCOL      3
 
 //Internal buffers for I/O and memory. These buffers are defined in the
 //auto-generated glueVars.cpp file
@@ -77,10 +78,20 @@ extern IEC_UDINT *dint_output[BUFFER_SIZE];
 extern IEC_ULINT *lint_input[BUFFER_SIZE];
 extern IEC_ULINT *lint_output[BUFFER_SIZE];
 
+//Real Input Variables
+extern IEC_REAL *real_input[BUFFER_SIZE];
+extern IEC_LREAL *lreal_input[BUFFER_SIZE];
+
+//Real Output Variables  
+extern IEC_REAL *real_output[BUFFER_SIZE];
+extern IEC_LREAL *lreal_output[BUFFER_SIZE];
+
 //Memory
 extern IEC_UINT *int_memory[BUFFER_SIZE];
 extern IEC_UDINT *dint_memory[BUFFER_SIZE];
 extern IEC_ULINT *lint_memory[BUFFER_SIZE];
+extern IEC_REAL *real_memory[BUFFER_SIZE];
+extern IEC_LREAL *lreal_memory[BUFFER_SIZE];
 
 //Special Functions
 extern IEC_ULINT *special_functions[BUFFER_SIZE];
@@ -162,6 +173,17 @@ extern uint8_t rpi_modbus_rts_pin;     // If <> 0, expect hardware RTS to be use
 
 //dnp3.cpp
 void dnp3StartServer(int port);
+
+//opcua.cpp
+void opcuaStartServer(int port);
+void initializeOpcua();
+void finalizeOpcua();
+void stopOpcua();
+// OPC UA thread
+extern pthread_t opcua_thread;
+void *opcuaThread(void *arg);
+// Sync OPC UA shadows from PLC buffers once per cycle
+extern "C" void opcuaUpdateNodeValues();
 
 //persistent_storage.cpp
 void startPstorage();

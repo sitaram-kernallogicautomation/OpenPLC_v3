@@ -45,7 +45,8 @@ function linux_install_deps {
         $1 apt-get update
         $1 apt-get install -y build-essential pkg-config bison flex autoconf \
                               automake libtool make git \
-                              sqlite3 cmake curl python3 python3-venv openssl
+                              sqlite3 cmake curl python3 python3-venv \
+                              libopen62541-dev
     #Installing dependencies for opensuse tumbleweed
     elif [ -x /usr/bin/zypper ]; then
         $1 zypper ref
@@ -236,7 +237,7 @@ function install_all_libs {
     install_opendnp3 "$1"
     disable_ethercat "$1"
     install_libmodbus "$1"
-    install_libsnap7 "$1"
+    install_libsnap7 "$1" 
 }
 
 function finalize_install {

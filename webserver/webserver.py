@@ -231,6 +231,13 @@ def configure_runtime():
                     else:
                         print("Disabling EtherNet/IP")
                         openplc_runtime.stop_enip()
+                elif (row[0] == "Opcua_port"):
+                    if (row[1] != "disabled"):
+                        print("Enabling OPC UA on port " + str(int(row[1])))
+                        openplc_runtime.start_opcua(int(row[1]))
+                    else:
+                        print("Disabling OPC UA")
+                        openplc_runtime.stop_opcua()
                 elif (row[0] == "snap7"):
                     if (row[1] != "false"):
                         print("Enabling S7 Protocol")
@@ -370,6 +377,8 @@ def draw_status():
     if (openplc_runtime.status() == "Running"):
         status_str = "<center><h3 style='font-family:\"Roboto\", sans-serif; font-size:18px; color:white; padding:0px 0px 0px 0px;'>Status: <i>Running</i></span></center></h3>"
         status_str += "<a href='stop_plc' class='button' style='width: 210px; height: 53px; margin: 0px 20px 0px 20px;'><b>Stop PLC</b></a>"
+        status_str += "<a href='start_opcua' class='button' style='width: 210px; height: 53px; margin: 0px 20px 0px 20px; background-color: #28a745;'><b>Start OPC UA</b></a>"
+        status_str += "<a href='stop_opcua' class='button' style='width: 210px; height: 53px; margin: 0px 20px 0px 20px; background-color: #dc3545;'><b>Stop OPC UA</b></a>"
     else:
         status_str = "<center><h3 style='font-family:\"Roboto\", sans-serif; font-size:18px; color:white; padding:0px 0px 0px 0px;'>Status: <i>Stopped</i></span></center></h3>"
         status_str += "<a href='start_plc' class='button' style='width: 210px; height: 53px; margin: 0px 20px 0px 20px;'><b>Start PLC</b></a>"
@@ -645,13 +654,69 @@ def start_plc():
     if (flask_login.current_user.is_authenticated == False):
         return flask.redirect(flask.url_for('login'))
     else:
+        try:
+            print("Starting PLC from web interface...")
+            monitor.stop_monitor()
+            openplc_runtime.start_runtime()
+            time.sleep(2)  # Give more time for startup
+            configure_runtime()
+            monitor.cleanup()
+            monitor.parse_st(openplc_runtime.project_file)
+            print("PLC started successfully")
+            return flask.redirect(flask.url_for('dashboard'))
+        except Exception as e:
+            print(f"Error starting PLC: {e}")
+            return flask.redirect(flask.url_for('dashboard'))
+
+@app.route('/restart_plc')
+def restart_plc():
+    global openplc_runtime
+    if (flask_login.current_user.is_authenticated == False):
+        return flask.redirect(flask.url_for('login'))
+    else:
         monitor.stop_monitor()
-        openplc_runtime.start_runtime()
-        time.sleep(1)
+        openplc_runtime.restart_runtime()
+        time.sleep(2)
         configure_runtime()
         monitor.cleanup()
         monitor.parse_st(openplc_runtime.project_file)
         return flask.redirect(flask.url_for('dashboard'))
+
+@app.route('/start_opcua')
+def start_opcua():
+    global openplc_runtime
+    if (flask_login.current_user.is_authenticated == False):
+        return flask.redirect(flask.url_for('login'))
+    else:
+        try:
+            print("Starting OPC UA server from web interface...")
+            result = openplc_runtime.start_opcua(4840)  # Default OPC UA port
+            if result:
+                print("OPC UA server started successfully")
+            else:
+                print("Failed to start OPC UA server")
+            return flask.redirect(flask.url_for('dashboard'))
+        except Exception as e:
+            print(f"Error starting OPC UA server: {e}")
+            return flask.redirect(flask.url_for('dashboard'))
+
+@app.route('/stop_opcua')
+def stop_opcua():
+    global openplc_runtime
+    if (flask_login.current_user.is_authenticated == False):
+        return flask.redirect(flask.url_for('login'))
+    else:
+        try:
+            print("Stopping OPC UA server from web interface...")
+            result = openplc_runtime.stop_opcua()
+            if result:
+                print("OPC UA server stopped successfully")
+            else:
+                print("Failed to stop OPC UA server")
+            return flask.redirect(flask.url_for('dashboard'))
+        except Exception as e:
+            print(f"Error stopping OPC UA server: {e}")
+            return flask.redirect(flask.url_for('dashboard'))
 
 
 @app.route('/stop_plc')
@@ -660,10 +725,16 @@ def stop_plc():
     if (flask_login.current_user.is_authenticated == False):
         return flask.redirect(flask.url_for('login'))
     else:
-        openplc_runtime.stop_runtime()
-        time.sleep(1)
-        monitor.stop_monitor()
-        return flask.redirect(flask.url_for('dashboard'))
+        try:
+            print("Stopping PLC from web interface...")
+            monitor.stop_monitor()
+            openplc_runtime.stop_runtime()
+            monitor.cleanup()
+            print("PLC stopped successfully")
+            return flask.redirect(flask.url_for('dashboard'))
+        except Exception as e:
+            print(f"Error stopping PLC: {e}")
+            return flask.redirect(flask.url_for('dashboard'))
 
 
 @app.route('/runtime_logs')

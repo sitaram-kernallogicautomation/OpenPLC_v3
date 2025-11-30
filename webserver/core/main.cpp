@@ -47,6 +47,8 @@ IEC_BOOL __DEBUG;
 unsigned long __tick = 0;
 pthread_mutex_t bufferLock; //mutex for the internal buffers
 uint8_t run_openplc = 1; //Variable to control OpenPLC Runtime execution
+//static pthread_t opcua_thread; // OPC UA server thread
+
 
 // pointers to IO *array[const][const] from cpp to c and back again don't work as expected, so instead callbacks
 uint8_t *bool_input_call_back(int a, int b){ return bool_input[a][b]; }
@@ -122,6 +124,12 @@ int main(int argc,char **argv)
     //            S7 PROTOCOL INITIALIZATION
     //======================================================
     initializeSnap7();
+
+    //======================================================
+    //            OPC UA INITIALIZATION
+    //======================================================
+    initializeOpcua();
+    // OPC UA server is started by the webserver based on database settings
 
 
 
@@ -203,8 +211,15 @@ int main(int argc,char **argv)
         updateBuffersIn_MB(); //update input image table with data from slave devices
         handleSpecialFunctions();
         config_run__(__tick++); // execute plc program logic
+        
+        
+        // Update Modbus outputs while holding the lock
         updateBuffersOut_MB(); //update slave devices with data from the output image table
         pthread_mutex_unlock(&bufferLock); //unlock mutex
+
+        // Update OPC UA node values from PLC variables so clients see latest values
+        // Do this OUTSIDE bufferLock to avoid deadlocks with the OPC UA server thread
+        opcuaUpdateNodeValues();
 
         updateBuffersOut(); //write output image
         
@@ -253,6 +268,10 @@ int main(int argc,char **argv)
 #endif
 
     finalizeSnap7();
+    // Stop and join OPC UA thread
+    stopOpcua();
+    pthread_join(opcua_thread, NULL);
+    finalizeOpcua();
     printf("Disabling outputs\n");
     disableOutputs();
     updateBuffersOut();

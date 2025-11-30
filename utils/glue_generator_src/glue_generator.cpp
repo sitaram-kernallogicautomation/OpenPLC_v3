@@ -67,10 +67,20 @@ IEC_UDINT *dint_output[BUFFER_SIZE];\r\n\
 IEC_ULINT *lint_input[BUFFER_SIZE];\r\n\
 IEC_ULINT *lint_output[BUFFER_SIZE];\r\n\
 \r\n\
+//Real I/O\r\n\
+IEC_REAL *real_input[BUFFER_SIZE];\r\n\
+IEC_REAL *real_output[BUFFER_SIZE];\r\n\
+\r\n\
+//Long Real I/O\r\n\
+IEC_LREAL *lreal_input[BUFFER_SIZE];\r\n\
+IEC_LREAL *lreal_output[BUFFER_SIZE];\r\n\
+\r\n\
 //Memory\r\n\
 IEC_UINT *int_memory[BUFFER_SIZE];\r\n\
 IEC_UDINT *dint_memory[BUFFER_SIZE];\r\n\
 IEC_ULINT *lint_memory[BUFFER_SIZE];\r\n\
+IEC_REAL *real_memory[BUFFER_SIZE];\r\n\
+IEC_LREAL *lreal_memory[BUFFER_SIZE];\r\n\
 \r\n\
 //Special Functions\r\n\
 IEC_ULINT *special_functions[BUFFER_SIZE];\r\n\
@@ -190,6 +200,12 @@ void glueVar(ostream& glueVars, char *varName, char *varType)
 			case 'L':
 				glueVars << "\tlint_input[" << pos1 << "] = (IEC_ULINT *)" << varName << ";\r\n";
 				break;
+			case 'R':
+				glueVars << "\treal_input[" << pos1 << "] = (IEC_REAL *)" << varName << ";\r\n";
+				break;
+			case 'F':
+				glueVars << "\tlreal_input[" << pos1 << "] = (IEC_LREAL *)" << varName << ";\r\n";
+				break;
 		}
 	}
 	else if (varName[2] == 'Q')
@@ -210,7 +226,13 @@ void glueVar(ostream& glueVars, char *varName, char *varType)
 				glueVars << "\tdint_output[" << pos1 << "] = (IEC_UDINT *)" << varName << ";\r\n";
 				break;
 			case 'L':
-				glueVars << "\tlint_input[" << pos1 << "] = (IEC_ULINT *)" << varName << ";\r\n";
+				glueVars << "\tlint_output[" << pos1 << "] = (IEC_ULINT *)" << varName << ";\r\n";
+				break;
+			case 'R':
+				glueVars << "\treal_output[" << pos1 << "] = (IEC_REAL *)" << varName << ";\r\n";
+				break;
+			case 'F':
+				glueVars << "\tlreal_output[" << pos1 << "] = (IEC_LREAL *)" << varName << ";\r\n";
 				break;
 		}
 	}
@@ -230,6 +252,12 @@ void glueVar(ostream& glueVars, char *varName, char *varType)
 					glueVars << "\tspecial_functions[" << (pos1-1024) << "] = (IEC_ULINT *)" << varName << ";\r\n";
 				else
 					glueVars << "\tlint_memory[" << pos1 << "] = (IEC_ULINT *)" << varName << ";\r\n";
+				break;
+			case 'R':
+				glueVars << "\treal_memory[" << pos1 << "] = (IEC_REAL *)" << varName << ";\r\n";
+				break;
+			case 'F':
+				glueVars << "\tlreal_memory[" << pos1 << "] = (IEC_LREAL *)" << varName << ";\r\n";
 				break;
 		}
 	}
