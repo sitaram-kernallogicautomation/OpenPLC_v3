@@ -110,6 +110,32 @@ def restapi_callback_get(argument: str, data: dict) -> dict:
 
     elif argument == "ping":
         return {"status": "PING:OK"}
+
+    elif argument == "opcua-status":
+        # Get OPC UA port from database
+        database = "openplc.db"
+        conn = create_connection(database)
+        opcua_port = None
+        opcua_enabled = False
+        
+        if conn is not None:
+            try:
+                cur = conn.cursor()
+                cur.execute("SELECT * FROM Settings WHERE Key = 'Opcua_port'")
+                row = cur.fetchone()
+                cur.close()
+                conn.close()
+                
+                if row and row[1] != "disabled":
+                    opcua_port = int(row[1])
+                    opcua_enabled = True
+            except Exception as e:
+                logger.error(f"Error getting OPC UA status: {e}")
+        
+        return {
+            "opcua_enabled": opcua_enabled,
+            "opcua_port": opcua_port
+        }
     else:
         return {"error": "Unknown argument"}
 
@@ -125,39 +151,125 @@ def restapi_callback_post(argument: str, data: dict) -> dict:
         # validate filename
         if 'file' not in flask.request.files:
             return {"UploadFileFail": "No file part in the request", "CompilationStatus": "FAILED"}
-        st_file = flask.request.files['file']
+        uploaded_file = flask.request.files['file']
 
-        # validate file size
-        if st_file.content_length > 32 * 1024 * 1024:  # 32 MB limit
-            return {"UploadFileFail": "File is too large", "CompilationStatus": "FAILED"}
+        if uploaded_file.filename.endswith('.st'):
+            st_file = uploaded_file
+            # validate file size
+            if st_file.content_length > 32 * 1024 * 1024:  # 32 MB limit
+                return {"UploadFileFail": "File is too large", "CompilationStatus": "FAILED"}
 
-        # replace program file on database
-        database = "openplc.db"
-        conn = create_connection(database)
-        if (conn != None):
-            try:
-                cur = conn.cursor()
-                cur.execute("SELECT * FROM Programs WHERE Name = 'webserver_program'")
-                row = cur.fetchone()
-                cur.close()
-                conn.close()
+            # replace program file on database
+            database = "openplc.db"
+            conn = create_connection(database)
+            if (conn != None):
+                try:
+                    cur = conn.cursor()
+                    cur.execute("SELECT * FROM Programs WHERE Name = 'webserver_program'")
+                    row = cur.fetchone()
+                    cur.close()
+                    conn.close()
 
-                filename = str(row[3])
-                st_file.save(os.path.join('st_files', filename))
+                    filename = str(row[3])
+                    st_file.save(os.path.join('st_files', filename))
 
-                openplc_runtime.project_name = str(row[1])
-                openplc_runtime.project_description = str(row[2])
-                openplc_runtime.project_file = str(row[3])              
+                    openplc_runtime.project_name = str(row[1])
+                    openplc_runtime.project_description = str(row[2])
+                    openplc_runtime.project_file = str(row[3])              
 
-            except Exception as e:
-                return {"UploadFileFail": e, "CompilationStatus": "FAILED"}
+                except Exception as e:
+                    return {"UploadFileFail": e, "CompilationStatus": "FAILED"}
+            else:
+                return {"UploadFileFail": f"Error connecting to the database", "CompilationStatus": "FAILED"}
+
+            # Compile new program
+            delete_persistent_file()
+            openplc_runtime.compile_program(filename)
+            return {"UploadFileFail": "", "CompilationStatus": "COMPILING"}
         else:
-            return {"UploadFileFail": f"Error connecting to the database", "CompilationStatus": "FAILED"}
+            # case when file extension is not .st but other extensions
+            # save file to core folder
+            uploaded_file.save(os.path.join('core',uploaded_file.filename))
+            return {"UploadFileStatus": "Sucessfully saved file in core folder"} 
 
-        # Compile new program
-        delete_persistent_file()
-        openplc_runtime.compile_program(filename)
-        return {"UploadFileFail": "", "CompilationStatus": "COMPILING"}
+    elif argument == "start-opcua":
+        try:
+            # Get port from request data or use default
+            port = data.get("port", 4840)
+            
+            # Validate port number
+            try:
+                port = int(port)
+                if port < 1 or port > 65535:
+                    return {"error": "Invalid port number. Port must be between 1 and 65535"}
+            except (ValueError, TypeError):
+                return {"error": "Port must be a valid integer"}
+            
+            # Call RPC method to start OPC UA server (same as HTTP implementation)
+            print(f"Starting OPC UA server from REST API on port {port}...")
+            result = openplc_runtime.start_opcua(port)  # RPC call to start OPC UA server
+            
+            if result:
+                print("OPC UA server started successfully")
+                # Update database with the port for persistence
+                database = "openplc.db"
+                conn = create_connection(database)
+                if conn is not None:
+                    try:
+                        cur = conn.cursor()
+                        cur.execute("UPDATE Settings SET Value = ? WHERE Key = 'Opcua_port'", (str(port),))
+                        if cur.rowcount == 0:
+                            # If no row exists, insert it
+                            cur.execute("INSERT INTO Settings (Key, Value) VALUES ('Opcua_port', ?)", (str(port),))
+                        conn.commit()
+                        cur.close()
+                        conn.close()
+                    except Exception as e:
+                        logger.error(f"Error updating OPC UA port in database: {e}")
+                
+                return {"status": "OPCUA:STARTED", "port": port}
+            else:
+                print("Failed to start OPC UA server")
+                return {"error": "Failed to start OPC UA server"}
+        except Exception as e:
+            error_msg = f"Error starting OPC UA server: {e}"
+            print(error_msg)
+            logger.error(error_msg)
+            return {"error": error_msg}
+
+    elif argument == "stop-opcua":
+        try:
+            # Call RPC method to stop OPC UA server (same as HTTP implementation)
+            print("Stopping OPC UA server from REST API...")
+            result = openplc_runtime.stop_opcua()  # RPC call to stop OPC UA server
+            
+            if result:
+                print("OPC UA server stopped successfully")
+                # Update database to mark OPC UA as disabled for persistence
+                database = "openplc.db"
+                conn = create_connection(database)
+                if conn is not None:
+                    try:
+                        cur = conn.cursor()
+                        cur.execute("UPDATE Settings SET Value = 'disabled' WHERE Key = 'Opcua_port'")
+                        if cur.rowcount == 0:
+                            # If no row exists, insert it
+                            cur.execute("INSERT INTO Settings (Key, Value) VALUES ('Opcua_port', 'disabled')")
+                        conn.commit()
+                        cur.close()
+                        conn.close()
+                    except Exception as e:
+                        logger.error(f"Error updating OPC UA status in database: {e}")
+                
+                return {"status": "OPCUA:STOPPED"}
+            else:
+                print("Failed to stop OPC UA server")
+                return {"error": "Failed to stop OPC UA server"}
+        except Exception as e:
+            error_msg = f"Error stopping OPC UA server: {e}"
+            print(error_msg)
+            logger.error(error_msg)
+            return {"error": error_msg}
 
     else:
         return {"PostRequestError": "Unknown argument"}
